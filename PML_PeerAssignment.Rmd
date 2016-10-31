@@ -1,0 +1,93 @@
+---
+title: "Coursera - Practical Machine Learning  - Peer Project"
+output: html_document
+---
+
+
+### Introduction
+This is the peer assignment of Practical Machine Learning Coursera's class which is a part of Data Science specialization.
+
+### Getting and Cleaning Data
+First load the respective training and test and data files from the link provided and store them in pml-training.csv and pml-test.csv respectively. We have to use pml-training.csv to create tarining and vaidation data on our own. More information on these datasets can be found here[http://groupware.les.inf.puc-rio.br/har] 
+
+
+```{r}
+library(caret)
+library(randomForest)
+train_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(train_url, "pml-training.csv")
+download.file(test_url, "pml-test.csv")
+
+```
+After loading data and checking data values, we have observed that there are missiing values in form of "" empty string, #DIV/0! and NA. We can convert all these to NA to mark missing values consistent. Also we have removed columns that are not necessary for our model building. 
+
+```{r}
+read_train <- read.csv("pml-training.csv", na.strings = c("", "NA", "#DIV/0!"))
+read_test <- read.csv("pml-test.csv", na.strings = c("", "NA", "#DIV/0!"))
+```
+
+
+```{r}
+remove_col <- c("user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "X")
+
+remove <- names(read_train) %in% remove_col
+
+# remove columns that are not required
+read_train <- read_train[, !remove]
+read_test <- read_test[, !remove]
+```
+
+Its good pratice to have an estimate of percentage of missing data for a particular field and we can setup a threshold based on the variables that how much missing data is acceptable. For this project lets say that thereshold is 70%
+
+```{r}
+no_col <- dim(read_train)[2]
+na_col <- vector(length=no_col)
+
+for(i in 1:no_col){ na_col[i] <- sum(is.na(read_train[, i]))}
+
+train_data <- read_train[, which(na_col < 30)]
+test_data <- read_test[, which(na_col < 30)]
+```
+
+We can split up the training file into training data (70%) and validation data (30%)
+```{r}
+set.seed(1234)
+in_train <- createDataPartition(y=train_data$classe, p=0.7, list=FALSE)
+training <- train_data[in_train, ]
+cross_validation <- train_data[-in_train, ]
+```
+
+### Modeling the data
+We are using random forest method for modeling our data. In random forest it automatically selects importatnt variables and also correlates outliers and variance. We can also choose how many times we want our cross validation fold. 
+
+```{r}
+model_rf <- randomForest(classe ~ ., data=training, method="class")
+model_predict <- predict(model_rf, type="class")
+table(training$classe, model_predict)
+
+as.vector(100 * ( 1 - table(model_predict == training$classe) / sum(table(model_predict == training$classe))))
+
+# we can also check how the model is behaving on test data 
+model_predict_cv <- predict(model_rf, newdata=cross_validation,  type="class")
+table(cross_validation$classe, model_predict_cv)
+
+as.vector(100 * ( 1 - table(model_predict_cv == cross_validation$classe) / sum(table(model_predict_cv == cross_validation$classe))))
+
+```
+Model accuracy as tested on cross validation set is appox 99% and out of sample error is around 0.23%
+### Model Prediction
+We will do the same modification for test data as we did for our training data, so remove unwanted columns and columns which has more than 70 percent NA values
+```{r}
+read_test <- read_test[, !remove]
+
+test_data <- read_test[, which(na_col < 30)]
+
+model_predict <- predict(model_rf, test_data)
+
+predict(model_rf, test_data)
+
+```
+### Results
+Random forest model is able to predict all the 20 questions asked as part of this project correctly. 
+
